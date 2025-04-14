@@ -39,8 +39,16 @@ def send_email(subject, recipient, template):
         return False
 
 # MongoDB setup
-client = MongoClient(os.getenv('MONGODB_URI', 'mongodb://localhost:27017/'))
-db = client['Exsel-project']
+client = MongoClient(os.getenv('MONGODB_URI'))
+db = client.get_database('Exsel-project')
+
+# Verify database connection
+try:
+    # The ismaster command is cheap and does not require auth
+    client.admin.command('ismaster')
+    print('MongoDB connection successful')
+except Exception as e:
+    print(f'MongoDB connection failed: {e}')
 
 # Login manager setup
 login_manager = LoginManager()
