@@ -9,3 +9,4 @@ flask-bcrypt==1.0.1
 flask-mail==0.9.1
 gunicorn==21.2.0
 pymongo[srv]
+dnspython
