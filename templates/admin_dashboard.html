@@ -44,6 +44,7 @@
                         <tr>
                             <th>Title</th>
                             <th>Description</th>
+                            <th>Bus Number</th>
                             <th>Location</th>
                             <th>Status</th>
                             <th>Created At</th>
@@ -55,6 +56,7 @@
                         <tr>
                             <td>{{ complaint.title }}</td>
                             <td>{{ complaint.description }}</td>
+                            <td>{{ complaint.bus_route }}</td>
                             <td>{{ complaint.location }}</td>
                             <td>
                                 <span class="badge {% if complaint.status == 'pending' %}bg-warning{% elif complaint.status == 'in_progress' %}bg-info{% elif complaint.status == 'resolved' %}bg-success{% else %}bg-danger{% endif %}">
@@ -92,13 +94,8 @@
                 <table class="table table-striped">
                     <thead>
                         <tr>
-                            <th>Student ID</th>
-                            <th>Bus Number</th>
-                            <th>Title</th>
-                            <th>Description</th>
-                            <th>Location</th>
-                            <th>Status</th>
-                            <th>Date</th>
+                            <th>Email</th>
+                            <th>Registration Date</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
