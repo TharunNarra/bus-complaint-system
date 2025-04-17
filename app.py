@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 from bson import ObjectId
@@ -184,7 +184,7 @@ def admin_dashboard():
         return redirect(url_for('dashboard'))
     
     complaints = list(db.complaints.find())
-    users = list(db.users.find({'role': 'user'}))
+    users = list(db.users.find({'role': 'student'}))
     
     # Calculate statistics
     total_complaints = len(complaints)
@@ -202,55 +202,114 @@ def admin_dashboard():
 @login_required
 def submit_complaint():
     if request.method == 'POST':
-        # Enhanced form validation
+        # Get form data
         student_id = request.form.get('student_id')
         bus_route = request.form.get('bus_route')
         title = request.form.get('title')
         description = request.form.get('description')
         location = request.form.get('location')
+        incident_date = request.form.get('incident_date')
         
         # Validate required fields
-        if not all([student_id, bus_route, title, description, location]):
-            flash('All fields are required')
+        if not all([student_id, bus_route, title, description, location, incident_date]):
+            flash('All fields are required', 'error')
             return redirect(url_for('submit_complaint'))
             
-        complaint_data = {
-            'user_id': str(current_user.user_data['_id']),
-            'student_id': student_id,
-            'bus_route': bus_route,
-            'title': title,
-            'description': description,
-            'location': location,
-            'status': 'pending',
-            'created_at': datetime.utcnow(),
-            'updated_at': datetime.utcnow()
-        }
-        
-        result = db.complaints.insert_one(complaint_data)
-        
-        # Send confirmation email to user
-        complaint_template = f"""
-        <h2>Complaint Submission Confirmation</h2>
-        <p>Dear {current_user.user_data['email']},</p>
-        <p>Your complaint has been successfully submitted with the following details:</p>
-        <ul>
-            <li>Title: {title}</li>
-            <li>Bus Route: {bus_route}</li>
-            <li>Location: {location}</li>
-            <li>Status: Pending</li>
-        </ul>
-        <p>We will review your complaint and take necessary action.</p>
-        """
-        
-        if send_email('Complaint Submission Confirmation', current_user.user_data['email'], complaint_template):
-            flash('Complaint submitted successfully. Confirmation email sent!')
-        else:
-            flash('Complaint submitted successfully, but confirmation email could not be sent.')
-        return redirect(url_for('dashboard'))
+        try:
+            # Convert incident_date string to datetime
+            incident_date = datetime.strptime(incident_date, '%Y-%m-%d')
+            next_day = incident_date + timedelta(days=1)
+            
+            # Check for duplicate complaints
+            existing_complaints = db.complaints.find({
+                'bus_route': bus_route,
+                'created_at': {'$gte': incident_date, '$lt': next_day}
+            })
+            
+            for complaint in existing_complaints:
+                existing_description = complaint.get('description', '').lower()
+                if description.lower() in existing_description or existing_description in description.lower():
+                    flash('A similar complaint has already been submitted for this bus on the selected date.', 'warning')
+                    return redirect(url_for('submit_complaint'))
+            
+            # If no duplicate found, create new complaint
+            complaint_data = {
+                'user_id': str(current_user.user_data['_id']),
+                'student_id': student_id,
+                'bus_route': bus_route,
+                'title': title,
+                'description': description,
+                'location': location,
+                'status': 'pending',
+                'created_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow(),
+                'incident_date': incident_date
+            }
+            
+            result = db.complaints.insert_one(complaint_data)
+            
+            # Send confirmation email to user
+            complaint_template = f"""
+            <h2>Complaint Submission Confirmation</h2>
+            <p>Dear {current_user.user_data['email']},</p>
+            <p>Your complaint has been successfully submitted with the following details:</p>
+            <ul>
+                <li>Title: {title}</li>
+                <li>Bus Route: {bus_route}</li>
+                <li>Location: {location}</li>
+                <li>Status: Pending</li>
+                <li>Incident Date: {incident_date.strftime('%Y-%m-%d')}</li>
+            </ul>
+            <p>We will review your complaint and take necessary action.</p>
+            """
+            
+            if send_email('Complaint Submission Confirmation', current_user.user_data['email'], complaint_template):
+                flash('Complaint submitted successfully. Confirmation email sent!', 'success')
+            else:
+                flash('Complaint submitted successfully, but confirmation email could not be sent.', 'warning')
+            return redirect(url_for('dashboard'))
+            
+        except Exception as e:
+            flash(f'Error submitting complaint: {str(e)}', 'error')
+            return redirect(url_for('submit_complaint'))
     
     # Get available bus routes (you can customize this list)
     bus_routes = ['Route 1', 'Route 2', 'Route 3', 'Route 4', 'Route 5']
     return render_template('submit_complaint.html', bus_routes=bus_routes)
+
+@app.route('/check_duplicate_complaint', methods=['POST'])
+@login_required
+def check_duplicate_complaint():
+    data = request.get_json()
+    bus_route = data.get('bus_route')
+    description = data.get('description', '').lower()
+    incident_date = data.get('incident_date')
+    
+    try:
+        # Convert incident_date string to datetime
+        incident_date = datetime.strptime(incident_date, '%Y-%m-%d')
+        next_day = incident_date + timedelta(days=1)
+        
+        # Check for existing complaints with the same bus route and similar description on the same day
+        existing_complaints = db.complaints.find({
+            'bus_route': bus_route,
+            'created_at': {'$gte': incident_date, '$lt': next_day}
+        })
+        
+        for complaint in existing_complaints:
+            existing_description = complaint.get('description', '').lower()
+            if description and (description in existing_description or existing_description in description):
+                return jsonify({
+                    'duplicate': True,
+                    'message': 'A similar complaint has already been submitted for this bus on the selected date.'
+                })
+        
+        return jsonify({'duplicate': False})
+    except Exception as e:
+        return jsonify({
+            'error': True,
+            'message': 'Error checking for duplicate complaints: ' + str(e)
+        }), 400
 
 if __name__ == '__main__':
     app.run(debug=True)
