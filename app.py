@@ -277,39 +277,36 @@ def submit_complaint():
     bus_routes = ['Route 1', 'Route 2', 'Route 3', 'Route 4', 'Route 5']
     return render_template('submit_complaint.html', bus_routes=bus_routes)
 
+
 @app.route('/check_duplicate_complaint', methods=['POST'])
 @login_required
 def check_duplicate_complaint():
     data = request.get_json()
     bus_route = data.get('bus_route')
-    description = data.get('description', '').lower()
-    incident_date = data.get('incident_date')
-    
+    description = data.get('description')
+    incident_date_str = data.get('incident_date')
+
     try:
-        # Convert incident_date string to datetime
-        incident_date = datetime.strptime(incident_date, '%Y-%m-%d')
+        # Convert string date to datetime object
+        incident_date = datetime.strptime(incident_date_str, '%Y-%m-%d')
         next_day = incident_date + timedelta(days=1)
-        
-        # Check for existing complaints with the same bus route and similar description on the same day
+
+        # Search for similar complaints on the same route and day
         existing_complaints = db.complaints.find({
             'bus_route': bus_route,
             'created_at': {'$gte': incident_date, '$lt': next_day}
         })
-        
+
         for complaint in existing_complaints:
             existing_description = complaint.get('description', '').lower()
-            if description and (description in existing_description or existing_description in description):
-                return jsonify({
-                    'duplicate': True,
-                    'message': 'A similar complaint has already been submitted for this bus on the selected date.'
-                })
-        
-        return jsonify({'duplicate': False})
+            if description.lower() in existing_description or existing_description in description.lower():
+                return {'duplicate': True, 'message': 'A similar complaint has already been submitted.'}, 200
+
+        return {'duplicate': False}, 200
+
     except Exception as e:
-        return jsonify({
-            'error': True,
-            'message': 'Error checking for duplicate complaints: ' + str(e)
-        }), 400
+        return {'error': str(e)}, 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)
