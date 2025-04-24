@@ -223,7 +223,7 @@ def submit_complaint():
             # Check for duplicate complaints
             existing_complaints = db.complaints.find({
                 'bus_route': bus_route,
-                'created_at': {'$gte': incident_date, '$lt': next_day}
+                'incident_date': {'$gte': incident_date, '$lt': next_day}
             })
             
             for complaint in existing_complaints:
@@ -294,7 +294,7 @@ def check_duplicate_complaint():
         # Search for similar complaints on the same route and day
         existing_complaints = db.complaints.find({
             'bus_route': bus_route,
-            'created_at': {'$gte': incident_date, '$lt': next_day}
+            'incident_date': {'$gte': incident_date, '$lt': next_day}
         })
 
         for complaint in existing_complaints:
